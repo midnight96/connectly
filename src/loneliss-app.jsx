@@ -1,4 +1,23 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import { initializeApp, getApps } from "firebase/app";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  serverTimestamp,
+} from "firebase/firestore";
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyDEA4i5-lbRT9PCwlLv0HZ6htWAZlH2qQU",
@@ -7,8 +26,12 @@ const FIREBASE_CONFIG = {
   storageBucket: "loneliss.firebasestorage.app",
   messagingSenderId: "600687956895",
   appId: "1:600687956895:web:0d28974aca3a3963b863aa",
-  measurementId: "G-4WY09H504X"
+  measurementId: "G-4WY09H504X",
 };
+
+const app = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 const MOODS = [
   { emoji: "😄", label: "Great", value: 5, color: "#22c55e" },
@@ -36,7 +59,6 @@ const greet = () => {
 };
 
 export default function LonelissApp() {
-  const [fbReady, setFbReady] = useState(false);
   const [user, setUser] = useState(null);
   const [screen, setScreen] = useState("home");
   const [checkins, setCheckins] = useState([]);
@@ -52,89 +74,59 @@ export default function LonelissApp() {
   const [socialSlider, setSocialSlider] = useState(3);
   const [note, setNote] = useState("");
   const [checkinStep, setCheckinStep] = useState(1);
-  const fbRef = useRef(null);
 
   useEffect(() => {
-    const scripts = [
-      "https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js",
-      "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js",
-      "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js",
-    ];
-    let loaded = 0;
-    scripts.forEach((src) => {
-      const s = document.createElement("script");
-      s.src = src;
-      s.onload = () => {
-        loaded++;
-        if (loaded === scripts.length) {
-          try {
-            if (!window.firebase.apps.length) {
-              window.firebase.initializeApp(FIREBASE_CONFIG);
-            }
-            fbRef.current = window.firebase;
-            setFbReady(true);
-          } catch (e) {
-            console.error("Firebase init error", e);
-            setAuthLoading(false);
-          }
-        }
-      };
-      document.head.appendChild(s);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!fbReady) return;
-    const fb = fbRef.current;
-    const unsub = fb.auth().onAuthStateChanged((u) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
       if (u) loadUserData(u.uid);
     });
     return unsub;
-  }, [fbReady]);
+  }, []);
 
   const loadUserData = async (uid) => {
-    const fb = fbRef.current;
-    const db = fb.firestore();
-    const snap = await db
-      .collection("checkins")
-      .where("uid", "==", uid)
-      .orderBy("date", "desc")
-      .limit(30)
-      .get();
-    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setCheckins(docs);
-    const today = docs.find((d) => d.date === dayKey());
-    setTodayCheckin(today || null);
+    try {
+      const q = query(
+        collection(db, "checkins"),
+        where("uid", "==", uid),
+        orderBy("date", "desc"),
+        limit(30)
+      );
+      const snap = await getDocs(q);
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setCheckins(docs);
+      const today = docs.find((d) => d.date === dayKey());
+      setTodayCheckin(today || null);
 
-    let s = 0;
-    const cur = new Date();
-    for (let i = 0; i < 30; i++) {
-      const k = dayKey(new Date(cur - i * 86400000));
-      if (docs.find((d) => d.date === k)) s++;
-      else break;
+      let s = 0;
+      const cur = new Date();
+      for (let i = 0; i < 30; i++) {
+        const k = dayKey(new Date(cur - i * 86400000));
+        if (docs.find((d) => d.date === k)) s++;
+        else break;
+      }
+      setStreak(s);
+
+      const p = docs.length * 10 + s * 5;
+      setPoints(p);
+      const badges = [];
+      if (docs.length >= 1) badges.push("first_checkin");
+      if (s >= 3) badges.push("streak3");
+      if (s >= 7) badges.push("streak7");
+      const socialCount = docs.reduce((acc, d) => acc + (d.socialCount || 0), 0);
+      if (socialCount >= 5) badges.push("social5");
+      setEarnedBadges(badges);
+    } catch (e) {
+      console.error("loadUserData error", e);
     }
-    setStreak(s);
-
-    const p = docs.length * 10 + s * 5;
-    setPoints(p);
-    const badges = [];
-    if (docs.length >= 1) badges.push("first_checkin");
-    if (s >= 3) badges.push("streak3");
-    if (s >= 7) badges.push("streak7");
-    const socialCount = docs.reduce((acc, d) => acc + (d.socialCount || 0), 0);
-    if (socialCount >= 5) badges.push("social5");
-    setEarnedBadges(badges);
   };
 
   const signInEmail = async (email, password, isSignUp) => {
-    const fb = fbRef.current;
     try {
       if (isSignUp) {
-        await fb.auth().createUserWithEmailAndPassword(email, password);
+        await createUserWithEmailAndPassword(auth, email, password);
       } else {
-        await fb.auth().signInWithEmailAndPassword(email, password);
+        await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (e) {
       const msg =
@@ -143,13 +135,14 @@ export default function LonelissApp() {
         : e.code === "auth/email-already-in-use" ? "Email already registered. Sign in instead."
         : e.code === "auth/weak-password" ? "Password must be at least 6 characters."
         : e.code === "auth/invalid-email" ? "Please enter a valid email address."
+        : e.code === "auth/invalid-credential" ? "Wrong email or password."
         : "Something went wrong. Try again.";
       showToast(msg, "error");
     }
   };
 
   const signOut = async () => {
-    await fbRef.current.auth().signOut();
+    await firebaseSignOut(auth);
     setUser(null);
     setCheckins([]);
     setTodayCheckin(null);
@@ -166,22 +159,23 @@ export default function LonelissApp() {
 
   const submitCheckin = async () => {
     if (!user || !selectedMood) return;
-    const fb = fbRef.current;
-    const db = fb.firestore();
-    const data = {
-      uid: user.uid,
-      date: dayKey(),
-      mood: selectedMood.value,
-      moodLabel: selectedMood.label,
-      socialCount: socialSlider,
-      note,
-      ts: fb.firestore.FieldValue.serverTimestamp(),
-    };
-    await db.collection("checkins").add(data);
-    loadUserData(user.uid);
-    setCheckinStep(4);
-    showToast("Check-in saved! +10 pts");
-    fetchNudge(selectedMood.value, socialSlider);
+    try {
+      await addDoc(collection(db, "checkins"), {
+        uid: user.uid,
+        date: dayKey(),
+        mood: selectedMood.value,
+        moodLabel: selectedMood.label,
+        socialCount: socialSlider,
+        note,
+        ts: serverTimestamp(),
+      });
+      loadUserData(user.uid);
+      setCheckinStep(4);
+      showToast("Check-in saved! +10 pts");
+      fetchNudge(selectedMood.value, socialSlider);
+    } catch (e) {
+      showToast("Failed to save. Try again.", "error");
+    }
   };
 
   const fetchNudge = async (moodVal, social) => {
@@ -299,7 +293,7 @@ Do not use bullet points. Be warm and conversational.`;
         )}
         {screen === "history" && <HistoryScreen checkins={checkins} />}
         {screen === "badges" && (
-          <BadgesScreen badges={BADGES} earned={earnedBadges} streak={streak} />
+          <BadgesScreen badges={BADGES} earned={earnedBadges} />
         )}
       </main>
 
@@ -358,19 +352,13 @@ function LoginScreen({ onSignIn }) {
           style={{ ...styles.authInput, marginTop: 10 }}
         />
 
-        <button
-          onClick={() => onSignIn(email, password, isSignUp)}
-          style={styles.signInBtn}
-        >
+        <button onClick={() => onSignIn(email, password, isSignUp)} style={styles.signInBtn}>
           {isSignUp ? "Create account" : "Sign in"}
         </button>
 
         <p style={{ fontSize: 13, color: "#6b7280", marginTop: 14 }}>
           {isSignUp ? "Already have an account? " : "Don't have an account? "}
-          <span
-            onClick={() => setIsSignUp(!isSignUp)}
-            style={{ color: "#16a34a", cursor: "pointer", fontWeight: 600 }}
-          >
+          <span onClick={() => setIsSignUp(!isSignUp)} style={{ color: "#16a34a", cursor: "pointer", fontWeight: 600 }}>
             {isSignUp ? "Sign in" : "Sign up"}
           </span>
         </p>
@@ -425,9 +413,7 @@ function HomeScreen({ firstName, streak, avgMood, nudge, nudgeLoading, todayChec
         <div style={styles.nudgeHeader}>
           <span style={{ fontSize: 20 }}>💌</span>
           <span style={styles.nudgeTitle}>Your nudge</span>
-          {todayCheckin && (
-            <button onClick={onFetchNudge} style={styles.refreshBtn}>↻ New</button>
-          )}
+          {todayCheckin && <button onClick={onFetchNudge} style={styles.refreshBtn}>↻ New</button>}
         </div>
         {nudgeLoading ? (
           <p style={styles.nudgeText}>Crafting your nudge…</p>
@@ -501,11 +487,7 @@ function CheckInScreen({ step, setStep, moods, selectedMood, setSelectedMood, so
               </button>
             ))}
           </div>
-          <button
-            disabled={!selectedMood}
-            onClick={() => setStep(2)}
-            style={{ ...styles.primaryBtn, opacity: selectedMood ? 1 : 0.4 }}
-          >
+          <button disabled={!selectedMood} onClick={() => setStep(2)} style={{ ...styles.primaryBtn, opacity: selectedMood ? 1 : 0.4 }}>
             Next →
           </button>
         </div>
@@ -516,23 +498,11 @@ function CheckInScreen({ step, setStep, moods, selectedMood, setSelectedMood, so
           <h2 style={styles.stepTitle}>How many people did you meaningfully interact with today?</h2>
           <div style={styles.sliderWrap}>
             <span style={styles.sliderValue}>{socialSlider}</span>
-            <input
-              type="range"
-              min={0}
-              max={5}
-              step={1}
-              value={socialSlider}
-              onChange={(e) => setSocialSlider(Number(e.target.value))}
-              style={styles.slider}
-            />
-            <div style={styles.sliderLabels}>
-              <span>0</span><span>5+</span>
-            </div>
+            <input type="range" min={0} max={5} step={1} value={socialSlider} onChange={(e) => setSocialSlider(Number(e.target.value))} style={styles.slider} />
+            <div style={styles.sliderLabels}><span>0</span><span>5+</span></div>
           </div>
           <p style={styles.sliderHint}>
-            {socialSlider === 0 ? "It's okay to have quiet days 🌙"
-              : socialSlider <= 2 ? "A little connection goes a long way 🌱"
-              : "Nice, you're reaching out! 🌟"}
+            {socialSlider === 0 ? "It's okay to have quiet days 🌙" : socialSlider <= 2 ? "A little connection goes a long way 🌱" : "Nice, you're reaching out! 🌟"}
           </p>
           <div style={styles.btnRow}>
             <button onClick={() => setStep(1)} style={styles.secondaryBtn}>← Back</button>
@@ -544,13 +514,7 @@ function CheckInScreen({ step, setStep, moods, selectedMood, setSelectedMood, so
       {step === 3 && (
         <div style={styles.stepWrap}>
           <h2 style={styles.stepTitle}>Anything on your mind? <span style={{ color: "#9ca3af", fontSize: 16 }}>(optional)</span></h2>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Write a few words… or leave it blank."
-            rows={4}
-            style={styles.textarea}
-          />
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Write a few words… or leave it blank." rows={4} style={styles.textarea} />
           <div style={styles.btnRow}>
             <button onClick={() => setStep(2)} style={styles.secondaryBtn}>← Back</button>
             <button onClick={onSubmit} style={styles.primaryBtn}>Save check-in ✓</button>
@@ -570,11 +534,7 @@ function CheckInScreen({ step, setStep, moods, selectedMood, setSelectedMood, so
               <span style={{ fontSize: 20 }}>💌</span>
               <span style={styles.nudgeTitle}>Your nudge</span>
             </div>
-            {nudgeLoading ? (
-              <p style={styles.nudgeText}>Crafting your nudge…</p>
-            ) : nudge ? (
-              <p style={styles.nudgeText}>{nudge}</p>
-            ) : null}
+            {nudgeLoading ? <p style={styles.nudgeText}>Crafting your nudge…</p> : nudge ? <p style={styles.nudgeText}>{nudge}</p> : null}
           </div>
         </div>
       )}
@@ -593,7 +553,6 @@ function HistoryScreen({ checkins }) {
       </div>
     );
   }
-
   return (
     <div style={styles.screen}>
       <h2 style={styles.sectionTitle}>Your history</h2>
@@ -640,68 +599,20 @@ function BadgesScreen({ badges, earned }) {
 }
 
 const styles = {
-  app: {
-    fontFamily: "'Segoe UI', system-ui, sans-serif",
-    maxWidth: 480,
-    margin: "0 auto",
-    minHeight: "100vh",
-    background: "#f0fdf4",
-    display: "flex",
-    flexDirection: "column",
-    position: "relative",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "16px 20px 12px",
-    background: "white",
-    borderBottom: "1px solid #d1fae5",
-    position: "sticky",
-    top: 0,
-    zIndex: 10,
-  },
+  app: { fontFamily: "'Segoe UI', system-ui, sans-serif", maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: "#f0fdf4", display: "flex", flexDirection: "column", position: "relative" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px 12px", background: "white", borderBottom: "1px solid #d1fae5", position: "sticky", top: 0, zIndex: 10 },
   logo: { display: "flex", alignItems: "center", gap: 8 },
   logoIcon: { fontSize: 24 },
   logoText: { fontSize: 20, fontWeight: 700, color: "#14532d", letterSpacing: "-0.5px" },
   headerRight: { display: "flex", alignItems: "center", gap: 12 },
   pointsBadge: { background: "#bbf7d0", color: "#166534", borderRadius: 20, padding: "4px 10px", fontSize: 13, fontWeight: 600 },
-  nav: {
-    display: "flex",
-    justifyContent: "space-around",
-    background: "white",
-    borderBottom: "1px solid #d1fae5",
-    padding: "4px 0",
-  },
-  navBtn: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 2,
-    padding: "8px 12px",
-    border: "none",
-    background: "transparent",
-    cursor: "pointer",
-    borderRadius: 12,
-    transition: "background 0.15s",
-  },
+  nav: { display: "flex", justifyContent: "space-around", background: "white", borderBottom: "1px solid #d1fae5", padding: "4px 0" },
+  navBtn: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 12, transition: "background 0.15s" },
   navBtnActive: { background: "#d1fae5" },
   navLabel: { fontSize: 11, color: "#374151", fontWeight: 500 },
   main: { flex: 1, overflowY: "auto" },
   screen: { padding: "20px 20px 80px" },
-  toast: {
-    position: "fixed",
-    top: 16,
-    left: "50%",
-    transform: "translateX(-50%)",
-    color: "white",
-    borderRadius: 10,
-    padding: "10px 20px",
-    fontWeight: 600,
-    fontSize: 14,
-    zIndex: 100,
-    boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-  },
+  toast: { position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", color: "white", borderRadius: 10, padding: "10px 20px", fontWeight: 600, fontSize: 14, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.15)" },
   loginPage: { display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", background: "#f0fdf4", padding: 20 },
   loginCard: { background: "white", borderRadius: 24, padding: "40px 32px", maxWidth: 360, width: "100%", textAlign: "center", boxShadow: "0 8px 40px rgba(0,0,0,0.08)" },
   loginTitle: { fontSize: 32, fontWeight: 800, color: "#14532d", margin: "0 0 6px", letterSpacing: "-1px" },
@@ -709,75 +620,22 @@ const styles = {
   featureList: { display: "flex", flexDirection: "column", gap: 12, marginBottom: 28, textAlign: "left" },
   featureRow: { display: "flex", alignItems: "center", gap: 12 },
   featureText: { color: "#374151", fontSize: 15 },
-  authInput: {
-    width: "100%",
-    borderRadius: 10,
-    border: "1.5px solid #d1d5db",
-    padding: "12px 14px",
-    fontSize: 15,
-    fontFamily: "inherit",
-    outline: "none",
-    boxSizing: "border-box",
-    color: "#111",
-  },
-  signInBtn: {
-    width: "100%",
-    background: "#16a34a",
-    color: "white",
-    border: "none",
-    borderRadius: 12,
-    padding: "13px",
-    fontSize: 15,
-    fontWeight: 700,
-    cursor: "pointer",
-    marginTop: 16,
-  },
+  authInput: { width: "100%", borderRadius: 10, border: "1.5px solid #d1d5db", padding: "12px 14px", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", color: "#111" },
+  signInBtn: { width: "100%", background: "#16a34a", color: "white", border: "none", borderRadius: 12, padding: "13px", fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 16 },
   greeting: { fontSize: 22, fontWeight: 700, color: "#14532d", marginBottom: 16 },
   statsRow: { display: "flex", gap: 10, marginBottom: 16 },
-  statCard: {
-    flex: 1,
-    background: "white",
-    borderRadius: 14,
-    padding: "14px 10px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 2,
-    border: "1.5px solid #d1fae5",
-  },
+  statCard: { flex: 1, background: "white", borderRadius: 14, padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, border: "1.5px solid #d1fae5" },
   statIcon: { fontSize: 20 },
   statNum: { fontSize: 22, fontWeight: 800, color: "#14532d" },
   statLabel: { fontSize: 11, color: "#6b7280", textAlign: "center" },
-  checkinPrompt: {
-    background: "white",
-    borderRadius: 16,
-    padding: "20px",
-    marginBottom: 16,
-    border: "1.5px solid #bbf7d0",
-    textAlign: "center",
-  },
+  checkinPrompt: { background: "white", borderRadius: 16, padding: "20px", marginBottom: 16, border: "1.5px solid #bbf7d0", textAlign: "center" },
   promptText: { fontSize: 18, fontWeight: 700, color: "#14532d", margin: "0 0 6px" },
   promptSub: { color: "#6b7280", fontSize: 14, margin: "0 0 16px" },
-  doneCard: {
-    background: "white",
-    borderRadius: 16,
-    padding: "16px 20px",
-    marginBottom: 16,
-    border: "1.5px solid #bbf7d0",
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-  },
+  doneCard: { background: "white", borderRadius: 16, padding: "16px 20px", marginBottom: 16, border: "1.5px solid #bbf7d0", display: "flex", alignItems: "center", gap: 14 },
   doneTitle: { margin: 0, fontWeight: 700, color: "#14532d", fontSize: 16 },
   doneSub: { margin: "4px 0 0", color: "#6b7280", fontSize: 13 },
   checkmark: { marginLeft: "auto", fontSize: 22, color: "#22c55e", fontWeight: 700 },
-  nudgeCard: {
-    borderRadius: 16,
-    padding: "16px 20px",
-    marginBottom: 16,
-    border: "1.5px solid #fde68a",
-    background: "#fffbeb",
-  },
+  nudgeCard: { borderRadius: 16, padding: "16px 20px", marginBottom: 16, border: "1.5px solid #fde68a", background: "#fffbeb" },
   nudgeHeader: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 },
   nudgeTitle: { fontWeight: 700, color: "#92400e", fontSize: 15, flex: 1 },
   refreshBtn: { background: "#fef3c7", border: "none", borderRadius: 8, padding: "4px 10px", fontSize: 13, cursor: "pointer", color: "#92400e", fontWeight: 600 },
@@ -794,61 +652,17 @@ const styles = {
   stepWrap: { display: "flex", flexDirection: "column", gap: 20 },
   stepTitle: { fontSize: 20, fontWeight: 700, color: "#14532d", margin: 0 },
   moodGrid: { display: "flex", gap: 10, flexWrap: "wrap" },
-  moodBtn: {
-    flex: "1 1 calc(33% - 10px)",
-    minWidth: 80,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 6,
-    padding: "14px 8px",
-    border: "2px solid #e5e7eb",
-    borderRadius: 14,
-    cursor: "pointer",
-    transition: "all 0.15s",
-    background: "white",
-  },
+  moodBtn: { flex: "1 1 calc(33% - 10px)", minWidth: 80, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "14px 8px", border: "2px solid #e5e7eb", borderRadius: 14, cursor: "pointer", transition: "all 0.15s", background: "white" },
   moodLabel: { fontSize: 13, color: "#374151", fontWeight: 500 },
   sliderWrap: { display: "flex", flexDirection: "column", gap: 10, alignItems: "center" },
   sliderValue: { fontSize: 48, fontWeight: 800, color: "#14532d" },
   slider: { width: "100%", accentColor: "#16a34a" },
   sliderLabels: { display: "flex", justifyContent: "space-between", width: "100%", fontSize: 12, color: "#9ca3af" },
   sliderHint: { textAlign: "center", color: "#6b7280", fontSize: 15, margin: 0 },
-  textarea: {
-    width: "100%",
-    borderRadius: 12,
-    border: "1.5px solid #d1fae5",
-    padding: "12px 14px",
-    fontSize: 15,
-    fontFamily: "inherit",
-    resize: "vertical",
-    outline: "none",
-    color: "#111",
-    boxSizing: "border-box",
-  },
+  textarea: { width: "100%", borderRadius: 12, border: "1.5px solid #d1fae5", padding: "12px 14px", fontSize: 15, fontFamily: "inherit", resize: "vertical", outline: "none", color: "#111", boxSizing: "border-box" },
   btnRow: { display: "flex", gap: 10 },
-  primaryBtn: {
-    flex: 1,
-    background: "#16a34a",
-    color: "white",
-    border: "none",
-    borderRadius: 12,
-    padding: "14px",
-    fontSize: 15,
-    fontWeight: 700,
-    cursor: "pointer",
-    transition: "opacity 0.15s",
-  },
-  secondaryBtn: {
-    background: "white",
-    color: "#374151",
-    border: "1.5px solid #d1d5db",
-    borderRadius: 12,
-    padding: "14px",
-    fontSize: 15,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
+  primaryBtn: { flex: 1, background: "#16a34a", color: "white", border: "none", borderRadius: 12, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "opacity 0.15s" },
+  secondaryBtn: { background: "white", color: "#374151", border: "1.5px solid #d1d5db", borderRadius: 12, padding: "14px", fontSize: 15, fontWeight: 600, cursor: "pointer" },
   successAnim: { textAlign: "center", marginBottom: 20 },
   successTitle: { fontSize: 24, fontWeight: 800, color: "#14532d", margin: "8px 0 4px" },
   successSub: { color: "#16a34a", fontWeight: 600, fontSize: 15, margin: 0 },
@@ -858,15 +672,7 @@ const styles = {
   sectionTitle: { fontSize: 20, fontWeight: 700, color: "#14532d", marginBottom: 4 },
   sectionSub: { fontSize: 14, color: "#6b7280", marginBottom: 16 },
   historyList: { display: "flex", flexDirection: "column", gap: 10 },
-  historyItem: {
-    background: "white",
-    borderRadius: 14,
-    padding: "14px 16px",
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 12,
-    border: "1px solid #e5e7eb",
-  },
+  historyItem: { background: "white", borderRadius: 14, padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 12, border: "1px solid #e5e7eb" },
   historyDate: { margin: 0, fontSize: 13, color: "#9ca3af", fontWeight: 500 },
   historyMood: { margin: "2px 0 0", fontSize: 15, fontWeight: 600, color: "#374151" },
   historyNote: { margin: "4px 0 0", fontSize: 13, color: "#6b7280", fontStyle: "italic" },
@@ -874,30 +680,9 @@ const styles = {
   empty: { textAlign: "center", padding: "60px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 },
   emptyText: { color: "#6b7280", fontSize: 16 },
   badgeGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
-  badgeCard: {
-    background: "white",
-    borderRadius: 16,
-    padding: "16px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 6,
-    border: "1.5px solid #d1fae5",
-    textAlign: "center",
-    transition: "opacity 0.3s",
-  },
+  badgeCard: { background: "white", borderRadius: 16, padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, border: "1.5px solid #d1fae5", textAlign: "center", transition: "opacity 0.3s" },
   badgeLabel: { fontSize: 14, fontWeight: 700, color: "#14532d", margin: 0 },
   badgeDesc: { fontSize: 12, color: "#6b7280", margin: 0 },
   earnedTag: { background: "#d1fae5", color: "#065f46", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700 },
-  signOut: {
-    position: "fixed",
-    bottom: 12,
-    right: 16,
-    background: "transparent",
-    border: "none",
-    color: "#9ca3af",
-    fontSize: 12,
-    cursor: "pointer",
-    padding: "4px 8px",
-  },
+  signOut: { position: "fixed", bottom: 12, right: 16, background: "transparent", border: "none", color: "#9ca3af", fontSize: 12, cursor: "pointer", padding: "4px 8px" },
 };
