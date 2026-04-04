@@ -178,10 +178,10 @@ export default function LonelissApp() {
   }
 };
 
-  const fetchNudge = async (moodVal, social) => {
-    setNudgeLoading(true);
-    try {
-      const prompt = `You are a warm, empathetic student wellness companion called Loneliss.
+ const fetchNudge = async (moodVal, social) => {
+  setNudgeLoading(true);
+  try {
+    const prompt = `You are a warm, empathetic student wellness companion called Connectly.
 A student just checked in. Mood score: ${moodVal}/5, Social interactions today: ${social}/5.
 Give ONE short, uplifting nudge (2-3 sentences max) that:
 - Acknowledges their current state with empathy
@@ -189,23 +189,24 @@ Give ONE short, uplifting nudge (2-3 sentences max) that:
 - Feels like a caring friend, not a therapist
 Do not use bullet points. Be warm and conversational.`;
 
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyA7djesOyyr8bWiNJU0PxwaYYqakBMR6jk`,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 150,
-          messages: [{ role: "user", content: prompt }],
+          contents: [{ parts: [{ text: prompt }] }],
         }),
-      });
-      const data = await res.json();
-      const text = data.content?.[0]?.text || "You're doing great — keep going!";
-      setNudge(text);
-    } catch (e) {
-      setNudge("You showed up today, and that matters. Consider sending a quick hello to someone you haven't spoken to in a while.");
-    }
-    setNudgeLoading(false);
-  };
+      }
+    );
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "You're doing great — keep going!";
+    setNudge(text);
+  } catch (e) {
+    setNudge("You showed up today, and that matters. Consider sending a quick hello to someone you haven't spoken to in a while.");
+  }
+  setNudgeLoading(false);
+};
 
   if (authLoading) return <LoadingScreen />;
   if (!user) return <LoginScreen onSignIn={signInEmail} />;
