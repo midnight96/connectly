@@ -6,6 +6,7 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  updateProfile,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -121,25 +122,26 @@ export default function LonelissApp() {
     }
   };
 
-  const signInEmail = async (email, password, isSignUp) => {
-    try {
-      if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-    } catch (e) {
-      const msg =
-        e.code === "auth/user-not-found" ? "No account found. Sign up first."
-        : e.code === "auth/wrong-password" ? "Wrong password."
-        : e.code === "auth/email-already-in-use" ? "Email already registered. Sign in instead."
-        : e.code === "auth/weak-password" ? "Password must be at least 6 characters."
-        : e.code === "auth/invalid-email" ? "Please enter a valid email address."
-        : e.code === "auth/invalid-credential" ? "Wrong email or password."
-        : "Something went wrong. Try again.";
-      showToast(msg, "error");
+  const signInEmail = async (email, password, isSignUp, name) => {
+  try {
+    if (isSignUp) {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(result.user, { displayName: name });
+    } else {
+      await signInWithEmailAndPassword(auth, email, password);
     }
-  };
+  } catch (e) {
+    const msg =
+      e.code === "auth/user-not-found" ? "No account found. Sign up first."
+      : e.code === "auth/wrong-password" ? "Wrong password."
+      : e.code === "auth/email-already-in-use" ? "Email already registered. Sign in instead."
+      : e.code === "auth/weak-password" ? "Password must be at least 6 characters."
+      : e.code === "auth/invalid-email" ? "Please enter a valid email address."
+      : e.code === "auth/invalid-credential" ? "Wrong email or password."
+      : "Something went wrong. Try again.";
+    showToast(msg, "error");
+  }
+};
 
   const signOut = async () => {
     await firebaseSignOut(auth);
@@ -211,7 +213,7 @@ Do not use bullet points. Be warm and conversational.`;
   if (authLoading) return <LoadingScreen />;
   if (!user) return <LoginScreen onSignIn={signInEmail} />;
 
-  const firstName = user.email?.split("@")[0] || "there";
+  const firstName = user.displayName?.split(" ")[0] || user.email?.split("@")[0] || "there";
   const avgMood =
     checkins.length > 0
       ? (checkins.slice(0, 7).reduce((a, c) => a + c.mood, 0) / Math.min(checkins.length, 7)).toFixed(1)
@@ -315,13 +317,14 @@ function LoadingScreen() {
 function LoginScreen({ onSignIn }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
 
   return (
     <div style={styles.loginPage}>
       <div style={styles.loginCard}>
         <div style={{ fontSize: 64, marginBottom: 8 }}>🌿</div>
-        <h1 style={styles.loginTitle}>Loneliss</h1>
+        <h1 style={styles.loginTitle}>Connectly</h1>
         <p style={styles.loginSub}>Your gentle companion for student wellbeing</p>
 
         <div style={styles.featureList}>
@@ -338,12 +341,21 @@ function LoginScreen({ onSignIn }) {
           ))}
         </div>
 
+        {isSignUp && (
+          <input
+            type="text"
+            placeholder="Your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={styles.authInput}
+          />
+        )}
         <input
           type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          style={styles.authInput}
+          style={{ ...styles.authInput, marginTop: isSignUp ? 10 : 0 }}
         />
         <input
           type="password"
@@ -353,7 +365,7 @@ function LoginScreen({ onSignIn }) {
           style={{ ...styles.authInput, marginTop: 10 }}
         />
 
-        <button onClick={() => onSignIn(email, password, isSignUp)} style={styles.signInBtn}>
+        <button onClick={() => onSignIn(email, password, isSignUp, name)} style={styles.signInBtn}>
           {isSignUp ? "Create account" : "Sign in"}
         </button>
 
