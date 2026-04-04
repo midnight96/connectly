@@ -157,26 +157,26 @@ export default function LonelissApp() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const submitCheckin = async () => {
-    if (!user || !selectedMood) return;
-    try {
-      await addDoc(collection(db, "checkins"), {
-        uid: user.uid,
-        date: dayKey(),
-        mood: selectedMood.value,
-        moodLabel: selectedMood.label,
-        socialCount: socialSlider,
-        note,
-        ts: serverTimestamp(),
-      });
-      loadUserData(user.uid);
-      setCheckinStep(4);
-      showToast("Check-in saved! +10 pts");
-      fetchNudge(selectedMood.value, socialSlider);
-    } catch (e) {
-      showToast("Failed to save. Try again.", "error");
-    }
-  };
+ const submitCheckin = async () => {
+  if (!user || !selectedMood) return;
+  try {
+    await addDoc(collection(db, "checkins"), {
+      uid: user.uid,
+      date: dayKey(),
+      mood: selectedMood.value,
+      moodLabel: selectedMood.label,
+      socialCount: socialSlider,
+      note,
+      ts: serverTimestamp(),
+    });
+    loadUserData(user.uid);
+    setCheckinStep(4);
+    showToast("Check-in saved! +10 pts");
+    fetchNudge(selectedMood.value, socialSlider);
+  } catch (e) {
+    showToast("Failed to save. Try again.", "error");
+  }
+};
 
   const fetchNudge = async (moodVal, social) => {
     setNudgeLoading(true);
