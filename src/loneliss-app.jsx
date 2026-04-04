@@ -212,7 +212,7 @@ Do not use bullet points. Be warm and conversational.`;
 };
 
   if (authLoading) return <LoadingScreen />;
-  if (!user) return <LoginScreen onSignIn={signInEmail} />;
+  if (!user) return <LoginScreen onSignIn={signInEmail} auth={auth} />;
 
   const firstName = user.displayName?.split(" ")[0] || user.email?.split("@")[0] || "there";
   const avgMood =
