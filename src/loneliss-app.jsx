@@ -7,6 +7,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   updateProfile,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -319,6 +320,58 @@ function LoginScreen({ onSignIn }) {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleReset = async () => {
+    if (!resetEmail) return;
+    try {
+      await sendPasswordResetEmail(auth, resetEmail);
+      setResetSent(true);
+    } catch (e) {
+      alert("No account found with that email.");
+    }
+  };
+
+  if (showReset) {
+    return (
+      <div style={styles.loginPage}>
+        <div style={styles.loginCard}>
+          <div style={{ fontSize: 64, marginBottom: 8 }}>🔑</div>
+          <h1 style={{ ...styles.loginTitle, fontSize: 24 }}>Reset password</h1>
+          <p style={styles.loginSub}>We'll send a reset link to your email</p>
+
+          {resetSent ? (
+            <div style={{ background: "#d1fae5", borderRadius: 12, padding: "16px", marginTop: 16 }}>
+              <p style={{ color: "#065f46", fontWeight: 600, margin: 0 }}>✓ Reset email sent!</p>
+              <p style={{ color: "#065f46", fontSize: 13, margin: "6px 0 0" }}>Check your inbox and follow the link.</p>
+            </div>
+          ) : (
+            <input
+              type="email"
+              placeholder="Your email"
+              value={resetEmail}
+              onChange={(e) => setResetEmail(e.target.value)}
+              style={{ ...styles.authInput, marginTop: 16 }}
+            />
+          )}
+
+          {!resetSent && (
+            <button onClick={handleReset} style={styles.signInBtn}>
+              Send reset link
+            </button>
+          )}
+
+          <p style={{ fontSize: 13, color: "#6b7280", marginTop: 14 }}>
+            <span onClick={() => { setShowReset(false); setResetSent(false); setResetEmail(""); }} style={{ color: "#16a34a", cursor: "pointer", fontWeight: 600 }}>
+              ← Back to sign in
+            </span>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.loginPage}>
@@ -364,6 +417,14 @@ function LoginScreen({ onSignIn }) {
           onChange={(e) => setPassword(e.target.value)}
           style={{ ...styles.authInput, marginTop: 10 }}
         />
+
+        {!isSignUp && (
+          <p style={{ fontSize: 13, color: "#6b7280", marginTop: 8, textAlign: "right" }}>
+            <span onClick={() => setShowReset(true)} style={{ color: "#16a34a", cursor: "pointer", fontWeight: 600 }}>
+              Forgot password?
+            </span>
+          </p>
+        )}
 
         <button onClick={() => onSignIn(email, password, isSignUp, name)} style={styles.signInBtn}>
           {isSignUp ? "Create account" : "Sign in"}
