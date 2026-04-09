@@ -21,17 +21,17 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
-const FIREBASE_CONFIG = {
+const firebaseConfig = {
   apiKey: "AIzaSyDEA4i5-lbRT9PCwlLv0HZ6htWAZlH2qQU",
-  authDomain: "loneliss.firebaseapp.com",
+  authDomain: "loneliss.appspot.com",
   projectId: "loneliss",
   storageBucket: "loneliss.firebasestorage.app",
   messagingSenderId: "600687956895",
   appId: "1:600687956895:web:0d28974aca3a3963b863aa",
-  measurementId: "G-4WY09H504X",
+  measurementId: "G-4WY09H504X"
 };
 
-const app = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -59,6 +59,23 @@ const greet = () => {
   if (h < 17) return "Good afternoon";
   return "Good evening";
 };
+
+function LoadingScreen() {
+  return (
+    <div style={{
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      minHeight: "100vh",
+      background: "#f0fdf4",
+      flexDirection: "column",
+      gap: 16,
+    }}>
+      <span style={{ fontSize: 48 }}>🌿</span>
+      <p style={{ color: "#16a34a", fontWeight: 600, fontSize: 16, margin: 0 }}>Loading…</p>
+    </div>
+  );
+}
 
 export default function LonelissApp() {
   const [user, setUser] = useState(null);
@@ -124,25 +141,25 @@ export default function LonelissApp() {
   };
 
   const signInEmail = async (email, password, isSignUp, name) => {
-  try {
-    if (isSignUp) {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(result.user, { displayName: name });
-    } else {
-      await signInWithEmailAndPassword(auth, email, password);
+    try {
+      if (isSignUp) {
+        const result = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(result.user, { displayName: name });
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (e) {
+      const msg =
+        e.code === "auth/user-not-found" ? "No account found. Sign up first."
+        : e.code === "auth/wrong-password" ? "Wrong password."
+        : e.code === "auth/email-already-in-use" ? "Email already registered. Sign in instead."
+        : e.code === "auth/weak-password" ? "Password must be at least 6 characters."
+        : e.code === "auth/invalid-email" ? "Please enter a valid email address."
+        : e.code === "auth/invalid-credential" ? "Wrong email or password."
+        : "Something went wrong. Try again.";
+      showToast(msg, "error");
     }
-  } catch (e) {
-    const msg =
-      e.code === "auth/user-not-found" ? "No account found. Sign up first."
-      : e.code === "auth/wrong-password" ? "Wrong password."
-      : e.code === "auth/email-already-in-use" ? "Email already registered. Sign in instead."
-      : e.code === "auth/weak-password" ? "Password must be at least 6 characters."
-      : e.code === "auth/invalid-email" ? "Please enter a valid email address."
-      : e.code === "auth/invalid-credential" ? "Wrong email or password."
-      : "Something went wrong. Try again.";
-    showToast(msg, "error");
-  }
-};
+  };
 
   const signOut = async () => {
     await firebaseSignOut(auth);
@@ -160,31 +177,31 @@ export default function LonelissApp() {
     setTimeout(() => setToast(null), 3000);
   };
 
- const submitCheckin = async () => {
-  if (!user || !selectedMood) return;
-  try {
-    await addDoc(collection(db, "checkins"), {
-      uid: user.uid,
-      date: dayKey(),
-      mood: selectedMood.value,
-      moodLabel: selectedMood.label,
-      socialCount: socialSlider,
-      note,
-      ts: serverTimestamp(),
-    });
-    loadUserData(user.uid);
-    setCheckinStep(4);
-    showToast("Check-in saved! +10 pts");
-    fetchNudge(selectedMood.value, socialSlider);
-  } catch (e) {
-    showToast("Failed to save. Try again.", "error");
-  }
-};
+  const submitCheckin = async () => {
+    if (!user || !selectedMood) return;
+    try {
+      await addDoc(collection(db, "checkins"), {
+        uid: user.uid,
+        date: dayKey(),
+        mood: selectedMood.value,
+        moodLabel: selectedMood.label,
+        socialCount: socialSlider,
+        note,
+        ts: serverTimestamp(),
+      });
+      loadUserData(user.uid);
+      setCheckinStep(4);
+      showToast("Check-in saved! +10 pts");
+      fetchNudge(selectedMood.value, socialSlider);
+    } catch (e) {
+      showToast("Failed to save. Try again.", "error");
+    }
+  };
 
- const fetchNudge = async (moodVal, social) => {
-  setNudgeLoading(true);
-  try {
-    const prompt = `You are a warm, empathetic student wellness companion called Connectly.
+  const fetchNudge = async (moodVal, social) => {
+    setNudgeLoading(true);
+    try {
+      const prompt = `You are a warm, empathetic student wellness companion called Connectly.
 A student just checked in. Mood score: ${moodVal}/5, Social interactions today: ${social}/5.
 Give ONE short, uplifting nudge (2-3 sentences max) that:
 - Acknowledges their current state with empathy
@@ -192,24 +209,24 @@ Give ONE short, uplifting nudge (2-3 sentences max) that:
 - Feels like a caring friend, not a therapist
 Do not use bullet points. Be warm and conversational.`;
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyA7djesOyyr8bWiNJU0PxwaYYqakBMR6jk`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "You're doing great — keep going!";
-    setNudge(text);
-  } catch (e) {
-    setNudge("You showed up today, and that matters. Consider sending a quick hello to someone you haven't spoken to in a while.");
-  }
-  setNudgeLoading(false);
-};
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyA7djesOyyr8bWiNJU0PxwaYYqakBMR6jk`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
+        }
+      );
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "You're doing great — keep going!";
+      setNudge(text);
+    } catch (e) {
+      setNudge("You showed up today, and that matters. Consider sending a quick hello to someone you haven't spoken to in a while.");
+    }
+    setNudgeLoading(false);
+  };
 
   if (authLoading) return <LoadingScreen />;
   if (!user) return <LoginScreen onSignIn={signInEmail} auth={auth} />;
@@ -314,15 +331,12 @@ function LoginScreen({ onSignIn, auth }) {
   const [showReset, setShowReset] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
-  
 
-  // 🔁 RESET PASSWORD
   const handleReset = async () => {
     if (!resetEmail) {
       alert("Enter email first");
       return;
     }
-
     try {
       await sendPasswordResetEmail(auth, resetEmail);
       setResetSent(true);
@@ -331,21 +345,13 @@ function LoginScreen({ onSignIn, auth }) {
     }
   };
 
-  // 🔁 RESET SCREEN
   if (showReset) {
     return (
       <div style={styles.loginPage}>
         <div style={styles.loginCard}>
           <div style={{ fontSize: 64 }}>🔑</div>
-
-          <h1 style={{ ...styles.loginTitle, fontSize: 24 }}>
-            Reset password
-          </h1>
-
-          <p style={styles.loginSub}>
-            We'll send a reset link to your email
-          </p>
-
+          <h1 style={{ ...styles.loginTitle, fontSize: 24 }}>Reset password</h1>
+          <p style={styles.loginSub}>We'll send a reset link to your email</p>
           {resetSent ? (
             <div style={{ background: "#d1fae5", padding: 12, borderRadius: 10 }}>
               <p style={{ margin: 0 }}>✓ Reset email sent!</p>
@@ -359,13 +365,11 @@ function LoginScreen({ onSignIn, auth }) {
                 onChange={(e) => setResetEmail(e.target.value)}
                 style={styles.authInput}
               />
-
               <button onClick={handleReset} style={styles.signInBtn}>
                 Send reset link
               </button>
             </>
           )}
-
           <p
             onClick={() => {
               setShowReset(false);
@@ -381,7 +385,6 @@ function LoginScreen({ onSignIn, auth }) {
     );
   }
 
-  
   return (
     <div style={styles.loginPage}>
       <div style={styles.loginCard}>
