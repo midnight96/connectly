@@ -231,7 +231,7 @@ Do not use bullet points. Be warm and conversational.`;
       <header style={styles.header}>
         <div style={styles.logo}>
           <span style={styles.logoIcon}>🌿</span>
-          <span style={styles.logoText}>Loneliss</span>
+          <span style={styles.logoText}>Connectly</span>
         </div>
         <div style={styles.headerRight}>
           <div style={styles.pointsBadge}>⭐ {points} pts</div>
@@ -306,16 +306,7 @@ Do not use bullet points. Be warm and conversational.`;
   );
 }
 
-function LoadingScreen() {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", gap: 12, background: "#f0fdf4" }}>
-      <span style={{ fontSize: 48 }}>🌿</span>
-      <p style={{ color: "#166534", fontFamily: "Georgia, serif", fontSize: 18 }}>Loading Loneliss…</p>
-    </div>
-  );
-}
-
-function LoginScreen({ onSignIn }) {
+function LoginScreen({ onSignIn, auth }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -323,9 +314,15 @@ function LoginScreen({ onSignIn }) {
   const [showReset, setShowReset] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
+  
 
+  // 🔁 RESET PASSWORD
   const handleReset = async () => {
-    if (!resetEmail) return;
+    if (!resetEmail) {
+      alert("Enter email first");
+      return;
+    }
+
     try {
       await sendPasswordResetEmail(auth, resetEmail);
       setResetSent(true);
@@ -334,45 +331,57 @@ function LoginScreen({ onSignIn }) {
     }
   };
 
+  // 🔁 RESET SCREEN
   if (showReset) {
     return (
       <div style={styles.loginPage}>
         <div style={styles.loginCard}>
-          <div style={{ fontSize: 64, marginBottom: 8 }}>🔑</div>
-          <h1 style={{ ...styles.loginTitle, fontSize: 24 }}>Reset password</h1>
-          <p style={styles.loginSub}>We'll send a reset link to your email</p>
+          <div style={{ fontSize: 64 }}>🔑</div>
+
+          <h1 style={{ ...styles.loginTitle, fontSize: 24 }}>
+            Reset password
+          </h1>
+
+          <p style={styles.loginSub}>
+            We'll send a reset link to your email
+          </p>
 
           {resetSent ? (
-            <div style={{ background: "#d1fae5", borderRadius: 12, padding: "16px", marginTop: 16 }}>
-              <p style={{ color: "#065f46", fontWeight: 600, margin: 0 }}>✓ Reset email sent!</p>
-              <p style={{ color: "#065f46", fontSize: 13, margin: "6px 0 0" }}>Check your inbox and follow the link.</p>
+            <div style={{ background: "#d1fae5", padding: 12, borderRadius: 10 }}>
+              <p style={{ margin: 0 }}>✓ Reset email sent!</p>
             </div>
           ) : (
-            <input
-              type="email"
-              placeholder="Your email"
-              value={resetEmail}
-              onChange={(e) => setResetEmail(e.target.value)}
-              style={{ ...styles.authInput, marginTop: 16 }}
-            />
+            <>
+              <input
+                type="email"
+                placeholder="Your email"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                style={styles.authInput}
+              />
+
+              <button onClick={handleReset} style={styles.signInBtn}>
+                Send reset link
+              </button>
+            </>
           )}
 
-          {!resetSent && (
-            <button onClick={handleReset} style={styles.signInBtn}>
-              Send reset link
-            </button>
-          )}
-
-          <p style={{ fontSize: 13, color: "#6b7280", marginTop: 14 }}>
-            <span onClick={() => { setShowReset(false); setResetSent(false); setResetEmail(""); }} style={{ color: "#16a34a", cursor: "pointer", fontWeight: 600 }}>
-              ← Back to sign in
-            </span>
+          <p
+            onClick={() => {
+              setShowReset(false);
+              setResetSent(false);
+              setResetEmail("");
+            }}
+            style={{ cursor: "pointer", color: "green" }}
+          >
+            ← Back
           </p>
         </div>
       </div>
     );
   }
 
+  
   return (
     <div style={styles.loginPage}>
       <div style={styles.loginCard}>
